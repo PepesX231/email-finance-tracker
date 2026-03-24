@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MailLedger — บัญชีจาก Email</title>
+<title>Pepeseiei</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=Noto+Sans+Thai:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <div class="logo">Mail<span>Ledger</span></div>
+  <div class="logo">Pepe<span>S</span></div>
   <nav class="nav-tabs">
     <button class="nav-tab active" onclick="showView('dashboard')">📊 Dashboard</button>
     <button class="nav-tab" onclick="showView('import')">📧 นำเข้า Email</button>
@@ -539,7 +539,7 @@
 <main>
   <!-- DASHBOARD VIEW -->
   <div id="view-dashboard" class="view active">
-    <div class="section-title">ภาพรวมการเงิน</div>
+    <div class="section-title">ภาพรวมการเงินของPepes</div>
     <div class="section-sub" id="dashboard-period">ยังไม่มีข้อมูล — ไปที่ "นำเข้า Email" เพื่อเริ่มต้น</div>
 
     <div class="stats-grid">
@@ -623,7 +623,7 @@ Subject: แจ้งผลการทำรายการ
 ..."></textarea>
 
         <button class="analyze-btn" id="analyze-btn" onclick="analyzeEmail()">
-          <span id="btn-text">🤖 วิเคราะห์ด้วย AI</span>
+          <span id="btn-text">วิเคราะห์ด้วย AI</span>
         </button>
       </div>
 
@@ -723,15 +723,15 @@ async function connectGmail() {
 
     status.innerHTML = '<div class="gmail-connected">✅ เชื่อมต่อ Gmail สำเร็จ — พบ 3 อีเมลการเงิน</div>';
     const mockEmails = [
-      "From: noreply@kasikornbank.com\nSubject: แจ้งผลการทำรายการ KBank\n\nโอนเงิน 3,500 บาท ไปยัง ร้านอาหารครัวคุณแม่ วันที่ 20/03/2024",
-      "From: receipt@grab.com\nSubject: ยืนยันการชำระเงิน Grab\n\nค่าเดินทาง GrabCar 85 บาท วันที่ 19/03/2024",
+      "From: pepesKuyyai@humyai.com\nSubject: แจ้งผลการทำรายการ\n\nโอนเงิน 3,500 บาท ไปยัง ร้านอาหารครัวคุณแม่ วันที่ 20/03/2024",
+      "From: Mickkak@grab.com\nSubject: ยืนยันการชำระเงิน Grab\n\nค่าเดินทาง GrabCar 85 บาท วันที่ 19/03/2024",
       "From: hr@company.co.th\nSubject: เงินเดือนเดือนมีนาคม\n\nโอนเงินเดือน 45,000 บาท วันที่ 25/03/2024"
     ];
     document.getElementById('email-text').value = mockEmails.join('\n\n---\n\n');
   } catch (e) {
     // Demo fallback
     status.innerHTML = '<div class="gmail-connected">✅ โหมดสาธิต — โหลด email ตัวอย่างแล้ว</div>';
-    document.getElementById('email-text').value = `From: noreply@kasikornbank.com
+    document.getElementById('email-text').value = `From: pepesKuyyai@humyai.com
 Subject: แจ้งผลการทำรายการ
 
 รายการโอนเงินออก
@@ -741,7 +741,7 @@ Subject: แจ้งผลการทำรายการ
 
 ---
 
-From: receipt@grab.com
+From: Mickkak@grab.com
 Subject: ใบเสร็จ Grab
 
 ค่าบริการ GrabCar
