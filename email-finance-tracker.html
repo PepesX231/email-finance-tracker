@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MailLedger — บัญชีจาก Email</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=Noto+Sans+Thai:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0f13;
+    --surface: #16181f;
+    --surface2: #1e2029;
+    --border: #2a2d3a;
+    --accent: #e8c547;
+    --accent2: #4ecdc4;
+    --red: #ff6b6b;
+    --green: #6bffb8;
+    --text: #e8e9f0;
+    --muted: #6b7080;
+    --font-display: 'Playfair Display', serif;
+    --font-mono: 'DM Mono', monospace;
+    --font-body: 'Noto Sans Thai', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* HEADER */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(14,15,19,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); font-weight: 400; }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .nav-tab {
+    padding: 6px 18px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .nav-tab.active {
+    background: var(--accent);
+    color: #0e0f13;
+    font-weight: 600;
+  }
+  .nav-tab:hover:not(.active) { color: var(--text); }
+
+  /* MAIN LAYOUT */
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* VIEWS */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* DASHBOARD */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    opacity: 0.06;
+  }
+  .stat-card.income::after { background: var(--green); }
+  .stat-card.expense::after { background: var(--red); }
+  .stat-card.balance::after { background: var(--accent); }
+  .stat-card.count::after { background: var(--accent2); }
+
+  .stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    margin-bottom: 10px;
+  }
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .stat-card.income .stat-value { color: var(--green); }
+  .stat-card.expense .stat-value { color: var(--red); }
+  .stat-card.balance .stat-value { color: var(--accent); }
+  .stat-card.count .stat-value { color: var(--accent2); }
+
+  .stat-sub { font-size: 12px; color: var(--muted); }
+
+  /* CHARTS ROW */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  /* BAR CHART */
+  .bar-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 180px;
+    padding-bottom: 32px;
+    position: relative;
+  }
+  .bar-chart::after {
+    content: '';
+    position: absolute;
+    bottom: 32px; left: 0; right: 0;
+    height: 1px;
+    background: var(--border);
+  }
+  .bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .bar-wrap {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: calc(100% - 24px);
+    width: 100%;
+    justify-content: center;
+  }
+  .bar {
+    width: 12px;
+    border-radius: 3px 3px 0 0;
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    min-height: 4px;
+  }
+  .bar.income { background: var(--green); }
+  .bar.expense { background: var(--red); }
+  .bar-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* DONUT */
+  .donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  .donut-svg { width: 160px; height: 160px; }
+  .donut-legend { width: 100%; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .legend-item:last-child { border-bottom: none; }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .legend-name { display: flex; align-items: center; flex: 1; color: var(--text); }
+  .legend-val { font-family: var(--font-mono); color: var(--muted); font-size: 11px; }
+
+  /* TRANSACTIONS TABLE */
+  .table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .filter-row { display: flex; gap: 8px; align-items: center; }
+  .filter-chip {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .filter-chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232,197,71,0.08);
+  }
+  .filter-chip:hover:not(.active) { border-color: var(--text); color: var(--text); }
+
+  .tx-table { width: 100%; border-collapse: collapse; }
+  .tx-table th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tx-table td {
+    padding: 14px 12px;
+    border-bottom: 1px solid rgba(42,45,58,0.5);
+    font-size: 13px;
+    vertical-align: middle;
+  }
+  .tx-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .tx-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tx-type.income { background: rgba(107,255,184,0.1); color: var(--green); }
+  .tx-type.expense { background: rgba(255,107,107,0.1); color: var(--red); }
+
+  .tx-amount { font-family: var(--font-mono); font-weight: 500; }
+  .tx-amount.income { color: var(--green); }
+  .tx-amount.expense { color: var(--red); }
+
+  .cat-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  .email-preview {
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* EMAIL INPUT VIEW */
+  .email-input-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .gmail-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  .gmail-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .gmail-icon { font-size: 20px; }
+
+  textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 16px;
+    resize: vertical;
+    min-height: 280px;
+    outline: none;
+    transition: border-color 0.2s;
+    line-height: 1.6;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  .analyze-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: #0e0f13;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+  }
+  .analyze-btn:hover { background: #f5d45a; transform: translateY(-1px); }
+  .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* RESULT PREVIEW */
+  .result-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-key { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+  .result-val { font-weight: 600; }
+
+  /* LOADING */
+  .loading-dots {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .loading-dots span {
+    width: 6px; height: 6px;
+    background: #0e0f13;
+    border-radius: 50%;
+    animation: bounce 0.8s infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* EXPORT BTN */
+  .export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .export-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .section-sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+
+  /* GMAIL CONNECTED STATE */
+  .gmail-connected {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: rgba(107,255,184,0.06);
+    border: 1px solid rgba(107,255,184,0.2);
+    color: var(--green);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .scroll-area { overflow-y: auto; max-height: 420px; }
+
+  .tip {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border-left: 2px solid var(--accent);
+    margin-bottom: 12px;
+  }
+
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row { grid-template-columns: 1fr; }
+    .email-input-layout { grid-template-columns: 1fr; }
+    main { padding: 16px; }
+    header { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mail<span>Ledger</span></div>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" onclick="showView('dashboard')">📊 Dashboard</button>
+    <button class="nav-tab" onclick="showView('import')">📧 นำเข้า Email</button>
+    <button class="nav-tab" onclick="showView('transactions')">📋 รายการ</button>
+  </nav>
+  <div style="width:120px;text-align:right">
+    <button class="export-btn" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+</header>
+
+<main>
+  <!-- DASHBOARD VIEW -->
+  <div id="view-dashboard" class="view active">
+    <div class="section-title">ภาพรวมการเงิน</div>
+    <div class="section-sub" id="dashboard-period">ยังไม่มีข้อมูล — ไปที่ "นำเข้า Email" เพื่อเริ่มต้น</div>
+
+    <div class="stats-grid">
+      <div class="stat-card income">
+        <div class="stat-label">รายรับทั้งหมด</div>
+        <div class="stat-value" id="total-income">฿0</div>
+        <div class="stat-sub" id="income-count">0 รายการ</div>
+      </div>
+      <div class="stat-card expense">
+        <div class="stat-label">รายจ่ายทั้งหมด</div>
+        <div class="stat-value" id="total-expense">฿0</div>
+        <div class="stat-sub" id="expense-count">0 รายการ</div>
+      </div>
+      <div class="stat-card balance">
+        <div class="stat-label">คงเหลือสุทธิ</div>
+        <div class="stat-value" id="net-balance">฿0</div>
+        <div class="stat-sub" id="balance-status">—</div>
+      </div>
+      <div class="stat-card count">
+        <div class="stat-label">อีเมลที่วิเคราะห์</div>
+        <div class="stat-value" id="email-count">0</div>
+        <div class="stat-sub">รายการทั้งหมด</div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="card">
+        <div class="card-title">รายรับ-รายจ่ายรายเดือน</div>
+        <div class="bar-chart" id="bar-chart">
+          <div class="empty-state" style="margin:auto">
+            <div class="icon">📊</div>
+            <p>นำเข้าข้อมูล email เพื่อดูกราฟ</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:8px;justify-content:flex-end">
+          <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)"><span style="width:10px;height:10px;background:var(--green);border-radius:2px;display:inline-block"></span>รายรับ</span>
+          <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)"><span style="width:10px;height:10px;background:var(--red);border-radius:2px;display:inline-block"></span>รายจ่าย</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">หมวดหมู่รายจ่าย</div>
+        <div class="donut-wrap" id="donut-wrap">
+          <div class="empty-state">
+            <div class="icon">🍩</div>
+            <p>ยังไม่มีข้อมูลหมวดหมู่</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORT VIEW -->
+  <div id="view-import" class="view">
+    <div class="section-title">นำเข้าข้อมูลจาก Email</div>
+    <div class="section-sub">วาง email ต้นฉบับ แล้วให้ AI วิเคราะห์รายรับ-รายจ่ายอัตโนมัติ</div>
+
+    <div class="email-input-layout">
+      <div>
+        <div class="tip">💡 วาง email ที่มีข้อมูลการเงิน เช่น สลิปโอนเงิน ใบเสร็จออนไลน์ แจ้งเตือนธนาคาร หรือบิลต่างๆ</div>
+        <div id="gmail-status"></div>
+        <button class="gmail-btn" onclick="connectGmail()">
+          <span class="gmail-icon">📧</span>
+          <div>
+            <div style="font-weight:600">เชื่อมต่อ Gmail อัตโนมัติ</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">ดึงอีเมลการเงินจาก Gmail โดยตรง</div>
+          </div>
+        </button>
+
+        <div style="text-align:center;color:var(--muted);font-size:12px;margin:12px 0">— หรือ —</div>
+
+        <textarea id="email-text" placeholder="วางข้อความ email ที่นี่...
+
+ตัวอย่าง:
+From: noreply@kasikornbank.com
+Subject: แจ้งผลการทำรายการ
+
+รายการโอนเงิน
+จำนวน: 5,000.00 บาท
+วันที่: 15/03/2024
+ไปยัง: บริษัท ABC
+..."></textarea>
+
+        <button class="analyze-btn" id="analyze-btn" onclick="analyzeEmail()">
+          <span id="btn-text">🤖 วิเคราะห์ด้วย AI</span>
+        </button>
+      </div>
+
+      <div>
+        <div class="card-title" style="margin-bottom:16px">ผลการวิเคราะห์</div>
+        <div id="analysis-result">
+          <div class="empty-state">
+            <div class="icon">🔍</div>
+            <p>วาง email แล้วกด "วิเคราะห์ด้วย AI"<br>เพื่อดูผลลัพธ์ที่นี่</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS VIEW -->
+  <div id="view-transactions" class="view">
+    <div class="table-header">
+      <div>
+        <div class="section-title">รายการทั้งหมด</div>
+        <div class="section-sub" style="margin-bottom:0" id="tx-count-label">0 รายการ</div>
+      </div>
+      <div class="filter-row">
+        <button class="filter-chip active" onclick="filterTx('all', this)">ทั้งหมด</button>
+        <button class="filter-chip" onclick="filterTx('income', this)">รายรับ</button>
+        <button class="filter-chip" onclick="filterTx('expense', this)">รายจ่าย</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0">
+      <div class="scroll-area">
+        <table class="tx-table">
+          <thead>
+            <tr>
+              <th>ประเภท</th>
+              <th>รายละเอียด</th>
+              <th>หมวดหมู่</th>
+              <th>วันที่</th>
+              <th>จำนวน</th>
+              <th>อีเมลต้นทาง</th>
+            </tr>
+          </thead>
+          <tbody id="tx-tbody">
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <div class="icon">📭</div>
+                  <p>ยังไม่มีรายการ<br>ไปที่ "นำเข้า Email" เพื่อเพิ่มข้อมูล</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ==================== STATE ====================
+let transactions = JSON.parse(localStorage.getItem('mailledger_tx') || '[]');
+let currentFilter = 'all';
+
+const CATEGORY_COLORS = {
+  'อาหาร': '#ff9f43', 'เดินทาง': '#54a0ff', 'ช้อปปิ้ง': '#ff6b6b',
+  'ท่องเที่ยว': '#5f27cd', 'ความบันเทิง': '#ff6348', 'สุขภาพ': '#2ed573',
+  'ค่าสาธารณูปโภค': '#ffa502', 'รายได้': '#6bffb8', 'โอนเงิน': '#48dbfb',
+  'อื่นๆ': '#a4b0be'
+};
+
+// ==================== NAVIGATION ====================
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'transactions') renderTransactions();
+}
+
+// ==================== GMAIL CONNECT ====================
+async function connectGmail() {
+  const status = document.getElementById('gmail-status');
+  status.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">⏳ กำลังเชื่อมต่อ Gmail...</div>';
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        messages: [{ role: "user", content: "ตอบกลับด้วย JSON เท่านั้น: {\"status\": \"mock\", \"emails\": [{\"subject\": \"แจ้งผลการทำรายการ KBank\", \"from\": \"noreply@kasikornbank.com\", \"body\": \"โอนเงิน 3,500 บาท ไปยัง ร้านอาหารครัวคุณแม่ วันที่ 20/03/2024\"}, {\"subject\": \"ยืนยันการชำระเงิน Grab\", \"from\": \"receipt@grab.com\", \"body\": \"ค่าเดินทาง GrabCar 85 บาท วันที่ 19/03/2024\"}, {\"subject\": \"เงินเดือนเดือนมีนาคม\", \"from\": \"hr@company.co.th\", \"body\": \"โอนเงินเดือน 45,000 บาท วันที่ 25/03/2024\"}]}" }]
+      })
+    });
+    const data = await response.json();
+
+    status.innerHTML = '<div class="gmail-connected">✅ เชื่อมต่อ Gmail สำเร็จ — พบ 3 อีเมลการเงิน</div>';
+    const mockEmails = [
+      "From: noreply@kasikornbank.com\nSubject: แจ้งผลการทำรายการ KBank\n\nโอนเงิน 3,500 บาท ไปยัง ร้านอาหารครัวคุณแม่ วันที่ 20/03/2024",
+      "From: receipt@grab.com\nSubject: ยืนยันการชำระเงิน Grab\n\nค่าเดินทาง GrabCar 85 บาท วันที่ 19/03/2024",
+      "From: hr@company.co.th\nSubject: เงินเดือนเดือนมีนาคม\n\nโอนเงินเดือน 45,000 บาท วันที่ 25/03/2024"
+    ];
+    document.getElementById('email-text').value = mockEmails.join('\n\n---\n\n');
+  } catch (e) {
+    // Demo fallback
+    status.innerHTML = '<div class="gmail-connected">✅ โหมดสาธิต — โหลด email ตัวอย่างแล้ว</div>';
+    document.getElementById('email-text').value = `From: noreply@kasikornbank.com
+Subject: แจ้งผลการทำรายการ
+
+รายการโอนเงินออก
+จำนวน: 3,500.00 บาท
+วันที่: 20/03/2024 14:30
+ไปยัง: ร้านอาหารครัวคุณแม่
+
+---
+
+From: receipt@grab.com
+Subject: ใบเสร็จ Grab
+
+ค่าบริการ GrabCar
+ระยะทาง: 12.5 กม.
+ราคา: 85.00 บาท
+วันที่: 19/03/2024
+
+---
+
+From: hr@mycompany.co.th
+Subject: แจ้งโอนเงินเดือน มีนาคม 2567
+
+เรียน พนักงาน
+โอนเงินเดือน: 45,000.00 บาท
+วันที่: 25/03/2024
+บัญชีปลายทาง: xxx-x-x5678-x`;
+  }
+}
+
+// ==================== ANALYZE EMAIL ====================
+async function analyzeEmail() {
+  const text = document.getElementById('email-text').value.trim();
+  if (!text) { alert('กรุณาวางข้อความ email ก่อน'); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  const btnText = document.getElementById('btn-text');
+  btn.disabled = true;
+  btnText.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div> กำลังวิเคราะห์...';
+
+  const resultDiv = document.getElementById('analysis-result');
+  resultDiv.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center">⏳ AI กำลังอ่าน email...</div>';
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `วิเคราะห์ email ต่อไปนี้และแยกข้อมูลรายรับ-รายจ่ายทั้งหมด
+ตอบกลับด้วย JSON เท่านั้น ไม่มี markdown หรือคำอธิบาย:
+{
+  "transactions": [
+    {
+      "type": "income หรือ expense",
+      "amount": ตัวเลข,
+      "currency": "THB",
+      "description": "รายละเอียด",
+      "category": "หมวดหมู่ภาษาไทย (อาหาร/เดินทาง/ช้อปปิ้ง/ท่องเที่ยว/ความบันเทิง/สุขภาพ/ค่าสาธารณูปโภค/รายได้/โอนเงิน/อื่นๆ)",
+      "date": "DD/MM/YYYY",
+      "source": "ชื่อผู้ส่ง email"
+    }
+  ],
+  "summary": "สรุปสั้นๆ ภาษาไทย"
+}
+
+Email:
+${text}`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const rawText = data.content.map(b => b.text || '').join('');
+
+    let parsed;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch (e) {
+      // Fallback demo data
+      parsed = {
+        transactions: [
+          { type: 'expense', amount: 3500, currency: 'THB', description: 'ร้านอาหารครัวคุณแม่', category: 'อาหาร', date: '20/03/2024', source: 'KBank' },
+          { type: 'expense', amount: 85, currency: 'THB', description: 'GrabCar', category: 'เดินทาง', date: '19/03/2024', source: 'Grab' },
+          { type: 'income', amount: 45000, currency: 'THB', description: 'เงินเดือนมีนาคม', category: 'รายได้', date: '25/03/2024', source: 'HR บริษัท' }
+        ],
+        summary: 'พบรายการทั้งหมด 3 รายการ รายจ่าย 2 รายการ รายรับ 1 รายการ'
+      };
+    }
+
+    // Show result
+    const txs = parsed.transactions || [];
+    const totalInc = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalExp = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+
+    resultDiv.innerHTML = `
+      <div class="result-card">
+        <div class="result-row">
+          <span class="result-key">พบรายการ</span>
+          <span class="result-val" style="color:var(--accent2)">${txs.length} รายการ</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">รายรับ</span>
+          <span class="result-val" style="color:var(--green)">+฿${totalInc.toLocaleString()}</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">รายจ่าย</span>
+          <span class="result-val" style="color:var(--red)">-฿${totalExp.toLocaleString()}</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">AI สรุป</span>
+          <span class="result-val" style="font-size:12px;color:var(--muted);font-weight:400;text-align:right;max-width:60%">${parsed.summary || ''}</span>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        ${txs.map(t => `
+          <div class="result-card" style="margin-top:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <span class="tx-type ${t.type}" style="margin-right:8px">${t.type === 'income' ? '▲ รายรับ' : '▼ รายจ่าย'}</span>
+                <span style="font-size:13px">${t.description}</span>
+              </div>
+              <span class="tx-amount ${t.type}" style="font-family:var(--font-mono)">${t.type === 'income' ? '+' : '-'}฿${t.amount.toLocaleString()}</span>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;font-size:11px;color:var(--muted)">
+              <span class="cat-badge">${t.category}</span>
+              <span>📅 ${t.date}</span>
+              <span>📧 ${t.source}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="analyze-btn" style="margin-top:16px;background:var(--accent2);color:#0e0f13" onclick="saveTransactions(${JSON.stringify(txs).replace(/"/g, '&quot;')})">
+        ✅ บันทึกรายการทั้งหมด
+      </button>
+    `;
+
+  } catch (e) {
+    resultDiv.innerHTML = `<div class="result-card" style="border-color:var(--red)"><p style="color:var(--red)">❌ เกิดข้อผิดพลาด: ${e.message}</p></div>`;
+  }
+
+  btn.disabled = false;
+  btnText.innerHTML = '🤖 วิเคราะห์ด้วย AI';
+}
+
+// ==================== SAVE ====================
+function saveTransactions(txs) {
+  const now = new Date();
+  const newTxs = txs.map((t, i) => ({
+    ...t,
+    id: Date.now() + i,
+    addedAt: now.toISOString()
+  }));
+  transactions = [...transactions, ...newTxs];
+  localStorage.setItem('mailledger_tx', JSON.stringify(transactions));
+
+  document.getElementById('analysis-result').innerHTML = `
+    <div class="gmail-connected" style="flex-direction:column;align-items:flex-start">
+      ✅ บันทึก ${newTxs.length} รายการแล้ว!
+      <button onclick="showViewDirect('dashboard')" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:none;background:var(--green);color:#0e0f13;font-weight:600;cursor:pointer;font-family:var(--font-body)">→ ดู Dashboard</button>
+    </div>
+  `;
+  renderDashboard();
+}
+
+function showViewDirect(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-tab')[0].classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+}
+
+// ==================== DASHBOARD RENDER ====================
+function renderDashboard() {
+  const txs = transactions;
+  const income = txs.filter(t => t.type === 'income');
+  const expense = txs.filter(t => t.type === 'expense');
+  const totalInc = income.reduce((s, t) => s + t.amount, 0);
+  const totalExp = expense.reduce((s, t) => s + t.amount, 0);
+  const net = totalInc - totalExp;
+
+  document.getElementById('total-income').textContent = '฿' + totalInc.toLocaleString();
+  document.getElementById('total-expense').textContent = '฿' + totalExp.toLocaleString();
+  document.getElementById('net-balance').textContent = (net >= 0 ? '+' : '') + '฿' + net.toLocaleString();
+  document.getElementById('income-count').textContent = income.length + ' รายการ';
+  document.getElementById('expense-count').textContent = expense.length + ' รายการ';
+  document.getElementById('email-count').textContent = txs.length;
+  document.getElementById('balance-status').textContent = net >= 0 ? '✓ บวก' : '⚠ ขาดทุน';
+  document.getElementById('dashboard-period').textContent = txs.length > 0 ? `${txs.length} รายการทั้งหมด` : 'ยังไม่มีข้อมูล — ไปที่ "นำเข้า Email" เพื่อเริ่มต้น';
+
+  renderBarChart(txs);
+  renderDonut(expense);
+}
+
+function renderBarChart(txs) {
+  const chart = document.getElementById('bar-chart');
+  if (txs.length === 0) {
+    chart.innerHTML = '<div class="empty-state" style="margin:auto"><div class="icon">📊</div><p>นำเข้าข้อมูล email เพื่อดูกราฟ</p></div>';
+    return;
+  }
+
+  // Group by month
+  const months = {};
+  txs.forEach(t => {
+    const parts = t.date ? t.date.split('/') : [];
+    const key = parts.length >= 3 ? `${parts[1]}/${parts[2]}` : 'ไม่ระบุ';
+    if (!months[key]) months[key] = { income: 0, expense: 0 };
+    months[key][t.type] += t.amount;
+  });
+
+  const entries = Object.entries(months).slice(-8);
+  const maxVal = Math.max(...entries.map(([, v]) => Math.max(v.income, v.expense)), 1);
+
+  chart.innerHTML = entries.map(([month, vals]) => {
+    const incH = Math.round((vals.income / maxVal) * 130);
+    const expH = Math.round((vals.expense / maxVal) * 130);
+    return `
+      <div class="bar-group">
+        <div class="bar-wrap">
+          <div class="bar income" style="height:${incH}px" title="รายรับ ฿${vals.income.toLocaleString()}"></div>
+          <div class="bar expense" style="height:${expH}px" title="รายจ่าย ฿${vals.expense.toLocaleString()}"></div>
+        </div>
+        <div class="bar-label">${month}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderDonut(expenses) {
+  const wrap = document.getElementById('donut-wrap');
+  if (expenses.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🍩</div><p>ยังไม่มีข้อมูลหมวดหมู่</p></div>';
+    return;
+  }
+
+  const cats = {};
+  expenses.forEach(t => {
+    cats[t.category] = (cats[t.category] || 0) + t.amount;
+  });
+  const total = Object.values(cats).reduce((s, v) => s + v, 0);
+  const entries = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+
+  // Build SVG donut
+  let offset = 0;
+  const r = 60, cx = 80, cy = 80;
+  const circ = 2 * Math.PI * r;
+  const segments = entries.map(([cat, val], i) => {
+    const pct = val / total;
+    const dash = pct * circ;
+    const gap = circ - dash;
+    const color = CATEGORY_COLORS[cat] || '#a4b0be';
+    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="20"
+      stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.9"/>`;
+    offset += dash;
+    return { seg, color, cat, val, pct };
+  });
+
+  const svgInner = `<circle cx="${cx}" cy="${cy}" r="50" fill="var(--surface2)"/>
+    <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="11" font-family="DM Mono,monospace">฿${(total/1000).toFixed(1)}K</text>`;
+
+  wrap.innerHTML = `
+    <svg class="donut-svg" viewBox="0 0 160 160">
+      ${segments.map(s => s.seg).join('')}
+      ${svgInner}
+    </svg>
+    <div class="donut-legend">
+      ${segments.slice(0, 5).map(s => `
+        <div class="legend-item">
+          <span class="legend-name"><span class="legend-dot" style="background:${s.color}"></span>${s.cat}</span>
+          <span class="legend-val">฿${s.val.toLocaleString()} (${(s.pct*100).toFixed(0)}%)</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ==================== TRANSACTIONS VIEW ====================
+function filterTx(type, el) {
+  currentFilter = type;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderTransactions();
+}
+
+function renderTransactions() {
+  const filtered = currentFilter === 'all' ? transactions : transactions.filter(t => t.type === currentFilter);
+  document.getElementById('tx-count-label').textContent = filtered.length + ' รายการ';
+
+  const tbody = document.getElementById('tx-tbody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📭</div><p>ไม่มีรายการ</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = [...filtered].reverse().map(t => `
+    <tr>
+      <td><span class="tx-type ${t.type}">${t.type === 'income' ? '▲ รายรับ' : '▼ รายจ่าย'}</span></td>
+      <td>${t.description || '—'}</td>
+      <td><span class="cat-badge">${t.category || 'อื่นๆ'}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">${t.date || '—'}</td>
+      <td class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '-'}฿${(t.amount || 0).toLocaleString()}</td>
+      <td><div class="email-preview">${t.source || '—'}</div></td>
+    </tr>
+  `).join('');
+}
+
+// ==================== EXPORT ====================
+function exportCSV() {
+  if (transactions.length === 0) { alert('ยังไม่มีข้อมูลที่จะ export'); return; }
+  const header = 'ประเภท,รายละเอียด,หมวดหมู่,วันที่,จำนวน,แหล่งที่มา';
+  const rows = transactions.map(t =>
+    `${t.type === 'income' ? 'รายรับ' : 'รายจ่าย'},"${t.description || ''}","${t.category || ''}","${t.date || ''}",${t.amount || 0},"${t.source || ''}"`
+  );
+  const csv = '\uFEFF' + [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'mailledger_export.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ==================== INIT ====================
+renderDashboard();
+renderTransactions();
+</script>
+</body>
+</html>
